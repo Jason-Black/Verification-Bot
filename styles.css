@@ -1,0 +1,23 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+}
+h1 {
+    text-align: center;
+}
+.input-group {
+    margin: 10px auto;
+    text-align: center;
+}
+input, button {
+    margin: 10px;
+}
+#audioPlayer {
+    margin: 20px auto;
+    text-align: center;
+}
+#extractedData {
+    text-align: center;
+    margin-top: 20px;
+    font-weight: bold;
+}
