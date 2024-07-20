@@ -1,3 +1,6 @@
+// Import the FFmpeg library
+const { createFFmpeg, fetchFile } = FFmpeg;
+
 // Generate a pseudo-random spreading code
 function generateSpreadingCode(length) {
     const code = [];
@@ -155,18 +158,16 @@ async function embedData() {
         const delay1 = 700; // Example delay for binary 1
         const modifiedAudioBuffer = embedDataCombined(audioBuffer, dataToEmbed, fingerprint, delay0, delay1);
 
-        // Play or save the modified audio buffer
-        const source = audioContext.createBufferSource();
-        source.buffer = modifiedAudioBuffer;
-        source.connect(audioContext.destination);
-        source.start();
-
-        // Optionally, save the modified audio buffer using FFmpeg.js
-        const ffmpeg = FFmpeg.createFFmpeg({ log: true });
+        // Initialize FFmpeg
+        const ffmpeg = createFFmpeg({ log: true });
         await ffmpeg.load();
-        const audioArrayBuffer = modifiedAudioBuffer.getChannelData(0).buffer;
-        ffmpeg.FS('writeFile', 'output.wav', new Uint8Array(audioArrayBuffer));
-        await ffmpeg.run('-i', 'output.wav', 'output_with_data.wav');
+
+        // Convert AudioBuffer to WAV format
+        const wavArrayBuffer = audioBufferToWav(modifiedAudioBuffer);
+        await ffmpeg.FS('writeFile', 'input.wav', new Uint8Array(wavArrayBuffer));
+        
+        // Perform FFmpeg processing
+        await ffmpeg.run('-i', 'input.wav', 'output_with_data.wav');
         const output = ffmpeg.FS('readFile', 'output_with_data.wav');
         const blob = new Blob([output.buffer], { type: 'audio/wav' });
         const url = URL.createObjectURL(blob);
@@ -190,6 +191,58 @@ async function extractData() {
         const extractedData = extractDataCombined(audioBuffer, dataLength, delay0, delay1);
         document.getElementById('extractedData').textContent = `Extracted Data: ${extractedData}`;
     }
+}
+
+// Convert AudioBuffer to WAV format
+function audioBufferToWav(buffer) {
+    const numOfChan = buffer.numberOfChannels;
+    const length = buffer.length * numOfChan * 2 + 44;
+    const bufferView = new DataView(new ArrayBuffer(length));
+    let offset = 0;
+    const writeString = (str) => {
+        for (let i = 0; i < str.length; i++) {
+            bufferView.setUint8(offset++, str.charCodeAt(i));
+        }
+    };
+
+    // RIFF identifier
+    writeString('RIFF');
+    bufferView.setUint32(offset, length - 8, true);
+    offset += 4;
+    writeString('WAVE');
+
+    // Format chunk identifier
+    writeString('fmt ');
+    bufferView.setUint32(offset, 16, true);
+    offset += 4;
+    bufferView.setUint16(offset, 1, true);
+    offset += 2;
+    bufferView.setUint16(offset, numOfChan, true);
+    offset += 2;
+    bufferView.setUint32(offset, buffer.sampleRate, true);
+    offset += 4;
+    bufferView.setUint32(offset, buffer.sampleRate * numOfChan * 2, true);
+    offset += 4;
+    bufferView.setUint16(offset, numOfChan * 2, true);
+    offset += 2;
+    bufferView.setUint16(offset, 16, true);
+    offset += 2;
+
+    // Data chunk identifier
+    writeString('data');
+    bufferView.setUint32(offset, length - offset - 4, true);
+    offset += 4;
+
+    // Write the PCM samples
+    for (let i = 0; i < buffer.length; i++) {
+        for (let channel = 0; channel < numOfChan; channel++) {
+            const sample = buffer.getChannelData(channel)[i];
+            bufferView.setInt16(offset, sample * (0x7FFF - 1), true);
+            offset += 2;
+        }
+    }
+
+    return bufferView.buffer;
 }
 
 // Event listeners for buttons
